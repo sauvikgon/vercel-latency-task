@@ -1,60 +1,13 @@
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from pathlib import Path
-import json
-import statistics
-
-app = FastAPI()
-
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
-
-@app.middleware("http")
-async def cors_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        response = JSONResponse(content={})
-        return add_cors_headers(response)
-
-    response = await call_next(request)
-    return add_cors_headers(response)
-
-def percentile_95(values):
-    values = sorted(values)
-    if not values:
-        return None
-
-    index = 0.95 * (len(values) - 1)
-    lower = int(index)
-    upper = min(lower + 1, len(values) - 1)
-    weight = index - lower
-
-    return values[lower] * (1 - weight) + values[upper] * weight
-
-def load_records():
-    root = Path(__file__).resolve().parent.parent
-    data_file = root / "q-vercel-latency.json"
-
-    with open(data_file, "r", encoding="utf-8") as f:
-        data = json.load(f)
-
-    if isinstance(data, list):
-        return data
-
-    for key in ["data", "records", "telemetry"]:
-        if key in data and isinstance(data[key], list):
-            return data[key]
-
-    raise ValueError("Could not find telemetry records in JSON")
-
-@app.get("/")
-def home():
+@app.get("/{path:path}")
+def home(path: str = ""):
     return {"message": "Latency API running"}
 
-@app.post("/")
-async def metrics(request: Request):
+@app.options("/{path:path}")
+def options_handler(path: str = ""):
+    return {}
+
+@app.post("/{path:path}")
+async def metrics(request: Request, path: str = ""):
     body = await request.json()
 
     regions = body.get("regions", [])
