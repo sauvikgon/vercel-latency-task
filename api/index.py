@@ -1,20 +1,40 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
 from pathlib import Path
 import json
 import statistics
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 CORS_HEADERS = {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "*",
+    "Access-Control-Allow-Headers": "*",
 }
 
 
-def with_cors_json(data, status_code=200):
+@app.middleware("http")
+async def force_cors_headers(request: Request, call_next):
+    if request.method == "OPTIONS":
+        return Response(status_code=204, headers=CORS_HEADERS)
+
+    response = await call_next(request)
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
+
+def json_response(data, status_code=200):
     return JSONResponse(
         content=data,
         status_code=status_code,
@@ -22,31 +42,8 @@ def with_cors_json(data, status_code=200):
     )
 
 
-def with_cors_empty(status_code=204):
-    return Response(
-        content="",
-        status_code=status_code,
-        headers=CORS_HEADERS,
-    )
-
-
-@app.middleware("http")
-async def cors_middleware(request: Request, call_next):
-    if request.method == "OPTIONS":
-        return with_cors_empty()
-
-    response = await call_next(request)
-
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
-
-    return response
-
-
 def percentile_95(values):
     values = sorted(values)
-
     if not values:
         return None
 
@@ -110,31 +107,31 @@ def compute_metrics(body):
 
 @app.get("/")
 def home():
-    return with_cors_json({"message": "Latency API running"})
+    return json_response({"message": "Latency API running"})
 
 
 @app.options("/")
 def options_root():
-    return with_cors_empty()
+    return Response(status_code=204, headers=CORS_HEADERS)
 
 
 @app.post("/")
 async def metrics_root(request: Request):
     body = await request.json()
-    return with_cors_json(compute_metrics(body))
+    return json_response(compute_metrics(body))
 
 
 @app.get("/metrics")
 def home_metrics():
-    return with_cors_json({"message": "Latency metrics endpoint"})
+    return json_response({"message": "Latency metrics endpoint"})
 
 
 @app.options("/metrics")
 def options_metrics():
-    return with_cors_empty()
+    return Response(status_code=204, headers=CORS_HEADERS)
 
 
 @app.post("/metrics")
 async def metrics_endpoint(request: Request):
     body = await request.json()
-    return with_cors_json(compute_metrics(body))
+    return json_response(compute_metrics(body))
