@@ -1,27 +1,36 @@
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pathlib import Path
 import json
 import statistics
 
 app = FastAPI()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["POST", "OPTIONS"],
-    allow_headers=["*"],
-)
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "*"
+    return response
+
+@app.middleware("http")
+async def cors_middleware(request: Request, call_next):
+    if request.method == "OPTIONS":
+        response = JSONResponse(content={})
+        return add_cors_headers(response)
+
+    response = await call_next(request)
+    return add_cors_headers(response)
 
 def percentile_95(values):
     values = sorted(values)
     if not values:
         return None
+
     index = 0.95 * (len(values) - 1)
     lower = int(index)
     upper = min(lower + 1, len(values) - 1)
     weight = index - lower
+
     return values[lower] * (1 - weight) + values[upper] * weight
 
 def load_records():
@@ -31,7 +40,6 @@ def load_records():
     with open(data_file, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Handles both direct list and wrapped JSON like {"data": [...]}
     if isinstance(data, list):
         return data
 
