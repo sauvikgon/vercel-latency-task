@@ -1,5 +1,5 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from pathlib import Path
 import json
 import statistics
@@ -7,23 +7,40 @@ import statistics
 app = FastAPI()
 
 
-def cors_response(content, status_code=200):
-    response = JSONResponse(content=content, status_code=status_code)
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
-    return response
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+}
+
+
+def with_cors_json(data, status_code=200):
+    return JSONResponse(
+        content=data,
+        status_code=status_code,
+        headers=CORS_HEADERS,
+    )
+
+
+def with_cors_empty(status_code=204):
+    return Response(
+        content="",
+        status_code=status_code,
+        headers=CORS_HEADERS,
+    )
 
 
 @app.middleware("http")
-async def add_cors_to_every_response(request: Request, call_next):
+async def cors_middleware(request: Request, call_next):
     if request.method == "OPTIONS":
-        return cors_response({})
+        return with_cors_empty()
 
     response = await call_next(request)
+
     response.headers["Access-Control-Allow-Origin"] = "*"
     response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-    response.headers["Access-Control-Allow-Headers"] = "*"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+
     return response
 
 
@@ -55,7 +72,7 @@ def load_records():
         if key in data and isinstance(data[key], list):
             return data[key]
 
-    raise ValueError("Could not find telemetry records in q-vercel-latency.json")
+    raise ValueError("Could not find telemetry records")
 
 
 def compute_metrics(body):
@@ -93,31 +110,31 @@ def compute_metrics(body):
 
 @app.get("/")
 def home():
-    return cors_response({"message": "Latency API running"})
+    return with_cors_json({"message": "Latency API running"})
 
 
 @app.options("/")
 def options_root():
-    return cors_response({})
+    return with_cors_empty()
 
 
 @app.post("/")
 async def metrics_root(request: Request):
     body = await request.json()
-    return cors_response(compute_metrics(body))
+    return with_cors_json(compute_metrics(body))
 
 
 @app.get("/metrics")
 def home_metrics():
-    return cors_response({"message": "Latency metrics endpoint"})
+    return with_cors_json({"message": "Latency metrics endpoint"})
 
 
 @app.options("/metrics")
 def options_metrics():
-    return cors_response({})
+    return with_cors_empty()
 
 
 @app.post("/metrics")
 async def metrics_endpoint(request: Request):
     body = await request.json()
-    return cors_response(compute_metrics(body))
+    return with_cors_json(compute_metrics(body))
